@@ -2,7 +2,20 @@
 //  StackSliceTests.swift
 //  StackTests
 //
-//  Created by Valeriano Della Longa on 01/11/2020.
+//  Created by Valeriano Della Longa on 2020/11/01.
+//  Copyright © 2020 Valeriano Della Longa. All rights reserved.
+//
+//  Permission to use, copy, modify, and/or distribute this software for any
+//  purpose with or without fee is hereby granted, provided that the above
+//  copyright notice and this permission notice appear in all copies.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+//  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+//  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+//  SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+//  WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+//  ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
+//  IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 //
 
 import XCTest
@@ -399,6 +412,28 @@ final class StackTests: XCTestCase {
         }
         wait(for: [exp3], timeout: 1)
         assertValueSemantics(copy)
+        
+        // Slice implementation works too:
+        sut = Stack(1...10)
+        var slice = sut[1...3]
+        var sliceBuffElements: Array<Int>!
+        let exp4 = expectation(description: "closure completes")
+        let result4 = slice.withContiguousMutableStorageIfAvailable { buff -> Bool in
+            defer { exp4.fulfill() }
+            sliceBuffElements = []
+            for i in buff.startIndex..<buff.endIndex {
+                buff[i] *= 10
+                sliceBuffElements.append(buff[i])
+            }
+            
+            return true
+        }
+        wait(for: [exp4], timeout: 0.1)
+        XCTAssertNotNil(result4)
+        XCTAssertEqual(sliceBuffElements, Array(slice))
+        
+        // value semantics on Slice:
+        XCTAssertNotEqual(sut, slice.base)
     }
     
     func testWithContiguousStorageIfAvailable() {
@@ -429,6 +464,21 @@ final class StackTests: XCTestCase {
         wait(for: [exp2], timeout: 1)
         XCTAssertNotNil(result2)
         XCTAssertEqual(copiedValues, Array(sut[rangeToPick]))
+        
+        // Slice implementation works too:
+        sut = Stack(1...10)
+        let slice = sut[1...3]
+        var sliceBuffElements: Array<Int>!
+        let exp4 = expectation(description: "closure completes")
+        let result3 = slice.withContiguousStorageIfAvailable { buff -> Bool in
+            defer { exp4.fulfill() }
+            sliceBuffElements = Array(buff)
+            
+            return true
+        }
+        wait(for: [exp4], timeout: 0.1)
+        XCTAssertNotNil(result3)
+        XCTAssertEqual(sliceBuffElements, Array(slice))
     }
     
     // MARK: - Functional Programming methods
@@ -909,144 +959,7 @@ final class StackTests: XCTestCase {
         XCTAssertEqual(sut.debugDescription, "Optional(Stack.Stack<Swift.Int>([1, 2, 3, 4, 5]))")
     }
     
-    // MARK: - Performance tests
-    func testStackPerformanceAtSmallCount() {
-        measure(performanceLoopStackSmallCount)
-    }
-    
-    func testArrayPerformanceAtSmallCount() {
-        measure(performanceLoopArraySmallCount)
-    }
-    
-    func testCircularBufferPerformanceAtSmallCount() {
-        measure(performanceLoopCircularBufferSmallCount)
-    }
-    
-    func testStackPerformanceAtLargeCount() {
-        measure(performanceLoopStackLargeCount)
-    }
-    
-    func testArrayPerformanceAtLargeCount() {
-        measure(performanceLoopArrayLargeCount)
-    }
-    
-    func testCircularBufferPerformanceAtLargeCount() {
-        measure(performanceLoopCircularBufferLargeCount)
-    }
-    
     // MARK: - Helpers
-    private func performanceLoopStackSmallCount() {
-        let outerCount: Int = 10_000
-        let innerCount: Int = 20
-        var accumulator = 0
-        for _ in 1...outerCount {
-            var stack = Stack<Int>()
-            stack.reserveCapacity(innerCount)
-            for i in 1...innerCount {
-                stack.push(i)
-                accumulator ^= (stack.first ?? 0)
-            }
-            for _ in 1...innerCount {
-                accumulator ^= (stack.first ?? 0)
-                stack.pop()
-            }
-        }
-        XCTAssert(accumulator == 0)
-    }
-    
-    private func performanceLoopArraySmallCount() {
-        let outerCount: Int = 10_000
-        let innerCount: Int = 20
-        var accumulator = 0
-        for _ in 1...outerCount {
-            var array = Array<Int>()
-            array.reserveCapacity(innerCount)
-            for i in 1...innerCount {
-                array.append(i)
-                accumulator ^= (array.last ?? 0)
-            }
-            for _ in 1...innerCount {
-                accumulator ^= (array.last ?? 0)
-                let _ = array.popLast()
-            }
-        }
-        XCTAssert(accumulator == 0)
-    }
-    
-    private func performanceLoopCircularBufferSmallCount() {
-        let outerCount: Int = 10_000
-        let innerCount: Int = 20
-        var accumulator = 0
-        for _ in 1...outerCount {
-            let ringBuffer = CircularBuffer<Int>(capacity: innerCount)
-            for i in 1...innerCount {
-                ringBuffer.push(i)
-                accumulator ^= (ringBuffer.first ?? 0)
-            }
-            for _ in 1...innerCount {
-                accumulator ^= (ringBuffer.first ?? 0)
-                ringBuffer.popFirst()
-            }
-        }
-        XCTAssert(accumulator == 0)
-    }
-    
-    private func performanceLoopStackLargeCount() {
-        let outerCount: Int = 10
-        let innerCount: Int = 20_000
-        var accumulator = 0
-        for _ in 1...outerCount {
-            var stack = Stack<Int>()
-            stack.reserveCapacity(innerCount)
-            for i in 1...innerCount {
-                stack.push(i)
-                accumulator ^= (stack.first ?? 0)
-            }
-            for _ in 1...innerCount {
-                accumulator ^= (stack.first ?? 0)
-                stack.pop()
-            }
-        }
-        XCTAssert(accumulator == 0)
-    }
-    
-    private func performanceLoopArrayLargeCount() {
-        let outerCount: Int = 10
-        let innerCount: Int = 20_000
-        var accumulator = 0
-        for _ in 1...outerCount {
-            var array = Array<Int>()
-            array.reserveCapacity(innerCount)
-            for i in 1...innerCount {
-                array.append(i)
-                accumulator ^= (array.last ?? 0)
-            }
-            for _ in 1...innerCount {
-                accumulator ^= (array.last ?? 0)
-                let _ = array.popLast()
-            }
-        }
-        XCTAssert(accumulator == 0)
-    }
-    
-    private func performanceLoopCircularBufferLargeCount() {
-        let outerCount: Int = 10
-        let innerCount: Int = 20_000
-        var accumulator = 0
-        for _ in 1...outerCount {
-            let ringBuffer = CircularBuffer<Int>(capacity: innerCount)
-            for i in 1...innerCount {
-                ringBuffer.push(i)
-                accumulator ^= (ringBuffer.first ?? 0)
-            }
-            for _ in 1...innerCount {
-                accumulator ^= (ringBuffer.first ?? 0)
-                ringBuffer.popFirst()
-            }
-        }
-        XCTAssert(accumulator == 0)
-    }
-    
     func assertValueSemantics(_ copy: Stack<Int>, file: StaticString = #file, line: UInt = #line) {
         assertAreDifferentValuesAndHaveDifferentStorage(lhs: sut, rhs: copy, file: file, line: line)
     }

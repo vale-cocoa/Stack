@@ -51,7 +51,7 @@ extension Stack: Collection, MutableCollection {
     
     public typealias Iterator = IndexingIterator<Stack<Element>>
     
-    public typealias SubSequence = StackSlice<Element>
+    public typealias SubSequence = Slice<Stack<Element>>
     
     public var startIndex: Int { 0 }
     
@@ -247,12 +247,12 @@ extension Stack: RangeReplaceableCollection {
         let difference = (count - subrange.count + newElements.count) - count
         let additionalCapacity = difference < 0 ? 0 : difference
         _makeUnique(additionalCapacity: additionalCapacity)
-        storage!.replace(subRange: subrange, with: newElements)
+        storage!.replace(subrange: subrange, with: newElements)
         _checkForEmptyAtEndOfMutation()
     }
     
     public mutating func reserveCapacity(_ n: Int) {
-        let additionalCapacity = n - count > 0 ? n - count : 0
+        let additionalCapacity = _additionalCapacityNeeded(forReservingCapacity: n)
         _makeUnique(additionalCapacity: additionalCapacity)
     }
     
@@ -542,14 +542,24 @@ extension Stack {
         } else if !_isUnique {
             storage = storage!.copy(additionalCapacity: additionalCapacity)
         } else if additionalCapacity > 0 {
-            storage!.allocateAdditionalCapacity(additionalCapacity)
+            storage!.reserveCapacity(storage!.residualCapacity + additionalCapacity)
         }
     }
     
+    @inline(__always)
     private mutating func _checkForEmptyAtEndOfMutation() {
         if self.storage?.count == 0 {
             self.storage = nil
         }
+    }
+    
+    @inline(__always)
+    private func _additionalCapacityNeeded(forReservingCapacity n: Int) -> Int {
+        guard n > 0  else { return 0 }
+        
+        let residual = storage?.residualCapacity ?? 0
+        
+        return n - residual > 0 ? n - residual : 0
     }
     
 }
